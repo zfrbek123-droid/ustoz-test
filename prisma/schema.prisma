@@ -1,0 +1,150 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// Foydalanuvchi: ustoz yoki o'quvchi
+model User {
+  id         String     @id @default(cuid())
+  login      String     @unique
+  password   String
+  name       String
+  role       String // TEACHER | STUDENT
+  points     Int        @default(0) // umumiy to'plangan ball (faqat guruh testidan)
+  money      Int        @default(0) // tanga
+  levelOrder Int        @default(1) // hozirgi daraja (1-6)
+  createdAt  DateTime   @default(now())
+  attempts   Attempt[]
+  purchases  Purchase[]
+}
+
+// Darajalar (1-6): Yangi boshlovchi, Shogird, ...
+model Level {
+  id             String @id @default(cuid())
+  order          Int    @unique
+  name           String
+  requiredPoints Int // to'plangan umumiy ball chegirasi
+  icon           String @default("sprout") // lucide icon kaliti
+}
+
+// Dars moduli
+model Module {
+  id     String  @id @default(cuid())
+  title  String
+  order  Int
+  topics Topic[]
+}
+
+// Mavzu — "galochka" (isCovered) ustoz tomonidan belgilanadi
+model Topic {
+  id        String     @id @default(cuid())
+  moduleId  String
+  module    Module     @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  title     String
+  isCovered Boolean    @default(false) // o'tilgan mavzu belgisi
+  questions Question[]
+}
+
+// Test savoli: 4 variantli
+model Question {
+  id               String            @id @default(cuid())
+  topicId          String
+  topic            Topic             @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  text             String
+  optionA          String
+  optionB          String
+  optionC          String
+  optionD          String
+  correct          String // "A" | "B" | "C" | "D"
+  sessionQuestions SessionQuestion[]
+}
+
+// Do'kon jihozi
+model ShopItem {
+  id               String     @id @default(cuid())
+  name             String
+  icon             String @default("📦") // emoji
+  price            Int
+  minLevel         Int        @default(1) // qaysi darajadan boshlab sotib olish mumkin
+  requiredForLevel Int        @default(0) // 0 = ixtiyoriy; N = N-darajaga o'tish uchun shart
+  purchases        Purchase[]
+}
+
+model Purchase {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  itemId    String
+  item      ShopItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, itemId])
+}
+
+// Test sessiyasi: guruh (ustoz ochadi) yoki individual (o'quvchi uyda)
+model TestSession {
+  id            String            @id @default(cuid())
+  type          String // GROUP | INDIVIDUAL
+  status        String            @default("ACTIVE") // ACTIVE | FINISHED
+  questionCount Int
+  createdById   String
+  topicIds      String @default("[]") // JSON array
+  createdAt     DateTime          @default(now())
+  finishedAt    DateTime?
+  questions     SessionQuestion[]
+  attempts      Attempt[]
+}
+
+// Sessiyaga tushgan savollar (tartibi bilan)
+model SessionQuestion {
+  id         String          @id @default(cuid())
+  sessionId  String
+  session    TestSession     @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  questionId String
+  question   Question        @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  order      Int
+  answers    Answer[]
+}
+
+// O'quvchining bir testga urinishi
+model Attempt {
+  id           String      @id @default(cuid())
+  sessionId    String
+  session      TestSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status       String      @default("IN_PROGRESS") // IN_PROGRESS | FINISHED
+  score        Int         @default(0) // to'g'ri javoblar soni
+  moneyEarned  Int         @default(0)
+  pointsEarned Int         @default(0)
+  createdAt    DateTime    @default(now())
+  finishedAt   DateTime?
+  answers      Answer[]
+
+  @@unique([sessionId, userId])
+}
+
+// O'quvchining bitta savolga javobi
+model Answer {
+  id                String          @id @default(cuid())
+  attemptId         String
+  attempt           Attempt         @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  sessionQuestionId String
+  sessionQuestion   SessionQuestion @relation(fields: [sessionQuestionId], references: [id], onDelete: Cascade)
+  selected          String // A/B/C/D
+  isCorrect         Boolean
+
+  @@unique([attemptId, sessionQuestionId])
+}
+
+// Sozlamalar (kalit-qiymat)
+model Setting {
+  id    String @id @default(cuid())
+  key   String @unique
+  value String
+}
